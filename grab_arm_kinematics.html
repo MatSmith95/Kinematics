@@ -1,0 +1,1336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grab Arm Kinematics — 2-DOF Excavator-Style</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=DM+Sans:wght@400;500;700&display=swap');
+
+:root {
+  --bg: #0f1117;
+  --panel: #1a1d27;
+  --border: #2a2d3a;
+  --text: #e0e2eb;
+  --dim: #6b7094;
+  --accent: #4f8cff;
+  --boom: #4fc3f7;
+  --stick: #81c784;
+  --cyl1: #ff8a65;
+  --cyl2: #ba68c8;
+  --tip: #ffd54f;
+  --highlight: #e94560;
+  --frame: #d0d3de;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  padding: 20px 32px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+header h1 {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+header .badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  background: var(--accent);
+  color: #fff;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-weight: 600;
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.canvas-area {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, #161825 0%, #0f1117 70%);
+}
+
+.sidebar {
+  width: 380px;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--dim);
+  margin-bottom: 12px;
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.mode-toggle {
+  display: flex;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.mode-toggle button {
+  flex: 1;
+  padding: 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mode-toggle button.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.slider-group {
+  margin-bottom: 14px;
+}
+
+.slider-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.slider-label span:first-child {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.slider-label .value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.num-input {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  width: 80px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.4);
+  color: var(--accent);
+  text-align: right;
+  outline: none;
+}
+
+.num-input:focus {
+  border-color: var(--accent);
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: 2px solid var(--bg);
+}
+
+input[type="range"].cyl1-slider::-webkit-slider-thumb {
+  background: var(--cyl1);
+}
+
+input[type="range"].cyl2-slider::-webkit-slider-thumb {
+  background: var(--cyl2);
+}
+
+input[type="range"].target-slider::-webkit-slider-thumb {
+  background: var(--tip);
+}
+
+.readout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.readout-item {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.readout-item .label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+  margin-bottom: 4px;
+}
+
+.readout-item .val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status-indicator.ok {
+  background: rgba(129, 199, 132, 0.1);
+  border: 1px solid rgba(129, 199, 132, 0.3);
+  color: var(--stick);
+}
+
+.status-indicator.warning {
+  background: rgba(255, 138, 101, 0.1);
+  border: 1px solid rgba(255, 138, 101, 0.3);
+  color: var(--cyl1);
+}
+
+.status-indicator.danger {
+  background: rgba(233, 69, 96, 0.1);
+  border: 1px solid rgba(233, 69, 96, 0.3);
+  color: var(--highlight);
+}
+
+.dot-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: pulse 1.5s infinite;
+}
+
+.ok .dot-indicator {
+  background: var(--stick);
+}
+
+.warning .dot-indicator {
+  background: var(--cyl1);
+}
+
+.danger .dot-indicator {
+  background: var(--highlight);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.param-table {
+  width: 100%;
+  font-size: 12px;
+  border-collapse: collapse;
+}
+
+.param-table td {
+  padding: 4px 6px;
+}
+
+.param-table td:first-child {
+  color: var(--dim);
+}
+
+.param-table td:last-child {
+  font-family: 'JetBrains Mono', monospace;
+  text-align: right;
+}
+
+.btn-clear {
+  width: 100%;
+  padding: 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-clear:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--accent);
+}
+
+.equations-box {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  padding: 12px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--dim);
+}
+
+.equations-box strong {
+  color: var(--text);
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Grab Arm Kinematics</h1>
+  <span class="badge">2-DOF EXCAVATOR</span>
+</header>
+
+<div class="main">
+  <div class="canvas-area">
+    <canvas id="cnv"></canvas>
+  </div>
+
+  <div class="sidebar">
+    <!-- Mode Toggle -->
+    <div>
+      <div class="section-title">Mode</div>
+      <div class="mode-toggle">
+        <button id="btnFK" class="active" onclick="setMode('fk')">Forward (Cyl→XY)</button>
+        <button id="btnIK" onclick="setMode('ik')">Inverse (XY→Cyl)</button>
+      </div>
+    </div>
+
+    <!-- Link Geometry -->
+    <div class="card">
+      <div class="section-title">Link Geometry (mm)</div>
+      <div class="slider-group">
+        <div class="slider-label">
+          <span>Boom Length (L₁)</span>
+          <input type="number" class="num-input" id="num-L1" step="10" value="1500">
+        </div>
+        <input type="range" id="sl-L1" min="500" max="3000" value="1500">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label">
+          <span>Stick Length (L₂)</span>
+          <input type="number" class="num-input" id="num-L2" step="10" value="1200">
+        </div>
+        <input type="range" id="sl-L2" min="300" max="2500" value="1200">
+      </div>
+    </div>
+
+    <!-- Cylinder 1 Mounting -->
+    <div class="card">
+      <div class="section-title">Cylinder 1 Mounting</div>
+      <div class="slider-group">
+        <div class="slider-label">
+          <span>Base Mount X Offset</span>
+          <input type="number" class="num-input" id="num-c1-base-x" step="10" value="150">
+        </div>
+        <input type="range" id="sl-c1-base-x" min="50" max="500" value="150">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label">
+          <span>Base Mount Y Offset</span>
+          <input type="number" class="num-input" id="num-c1-base-y" step="10" value="-100">
+        </div>
+        <input type="range" id="sl-c1-base-y" min="-300" max="300" value="-100">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label">
+          <span>Boom Attach Distance</span>
+          <input type="number" class="num-input" id="num-c1-boom-dist" step="10" value="600">
+        </div>
+        <input type="range" id="sl-c1-boom-dist" min="200" max="1400" value="600">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label">
+          <span>Boom Attach Offset</span>
+          <input type="number" class="num-input" id="num-c1-boom-off" step="10" value="80">
+        </div>
+        <input type="range" id="sl-c1-boom-off" min="-200" max="200" value="80">
+      </div>
+    </div>
+
+    <!-- Cylinder 2 Mounting -->
+    <div class="card">
+      <div class="section-title">Cylinder 2 Mounting</div>
+      <div class="slider-group">
+        <div class="slider-label">
+          <span>Boom Mount Distance</span>
+          <input type="number" class="num-input" id="num-c2-boom-dist" step="10" value="400">
+        </div>
+        <input type="range" id="sl-c2-boom-dist" min="100" max="1400" value="400">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label">
+          <span>Boom Mount Offset</span>
+          <input type="number" class="num-input" id="num-c2-boom-off" step="10" value="-80">
+        </div>
+        <input type="range" id="sl-c2-boom-off" min="-200" max="200" value="-80">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label">
+          <span>Stick Attach Distance</span>
+          <input type="number" class="num-input" id="num-c2-stick-dist" step="10" value="300">
+        </div>
+        <input type="range" id="sl-c2-stick-dist" min="100" max="800" value="300">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label">
+          <span>Stick Attach Offset</span>
+          <input type="number" class="num-input" id="num-c2-stick-off" step="10" value="80">
+        </div>
+        <input type="range" id="sl-c2-stick-off" min="-200" max="200" value="80">
+      </div>
+    </div>
+
+    <!-- Forward Mode Controls -->
+    <div id="fk-controls" class="card">
+      <div class="section-title">Forward Kinematics</div>
+      <div class="slider-group">
+        <div class="slider-label">
+          <span>🔶 Cylinder 1 Length</span>
+          <input type="number" class="num-input" id="num-cyl1" step="1" value="800">
+        </div>
+        <input type="range" class="cyl1-slider" id="sl-cyl1" min="300" max="1500" value="800">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label">
+          <span>🟣 Cylinder 2 Length</span>
+          <input type="number" class="num-input" id="num-cyl2" step="1" value="600">
+        </div>
+        <input type="range" class="cyl2-slider" id="sl-cyl2" min="200" max="1200" value="600">
+      </div>
+    </div>
+
+    <!-- Inverse Mode Controls -->
+    <div id="ik-controls" class="card" style="display:none;">
+      <div class="section-title">Inverse Kinematics</div>
+      <div class="slider-group">
+        <div class="slider-label">
+          <span>Target X</span>
+          <input type="number" class="num-input" id="num-target-x" step="10" value="1800">
+        </div>
+        <input type="range" class="target-slider" id="sl-target-x" min="-2500" max="2500" value="1800">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label">
+          <span>Target Y</span>
+          <input type="number" class="num-input" id="num-target-y" step="10" value="800">
+        </div>
+        <input type="range" class="target-slider" id="sl-target-y" min="-1500" max="2500" value="800">
+      </div>
+      <div style="margin-top:8px; padding:10px; background:rgba(0,0,0,0.3); border-radius:6px;">
+        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--dim); margin-bottom:8px;">Required Cylinder Lengths</div>
+        <div style="display:flex; gap:16px; margin-bottom:8px;">
+          <div><span style="color:var(--cyl1); font-size:12px;">Cyl₁ = </span><span style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:600;" id="ik-cyl1">—</span></div>
+          <div><span style="color:var(--cyl2); font-size:12px;">Cyl₂ = </span><span style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:600;" id="ik-cyl2">—</span></div>
+        </div>
+        <div id="ik-warning" style="font-size:11px; color:var(--highlight); display:none;">⚠ Target unreachable from workspace</div>
+      </div>
+    </div>
+
+    <!-- Readout Panel -->
+    <div>
+      <div class="section-title">State Readout</div>
+      <div class="readout">
+        <div class="readout-item"><div class="label">Tip X (mm)</div><div class="val" id="ro-x">—</div></div>
+        <div class="readout-item"><div class="label">Tip Y (mm)</div><div class="val" id="ro-y">—</div></div>
+        <div class="readout-item"><div class="label">θ₁ (deg)</div><div class="val" id="ro-theta1">—</div></div>
+        <div class="readout-item"><div class="label">θ₂ (deg)</div><div class="val" id="ro-theta2">—</div></div>
+        <div class="readout-item"><div class="label">Cyl 1 (mm)</div><div class="val" id="ro-cyl1">—</div></div>
+        <div class="readout-item"><div class="label">Cyl 2 (mm)</div><div class="val" id="ro-cyl2">—</div></div>
+        <div class="readout-item"><div class="label">Reach (mm)</div><div class="val" id="ro-reach">—</div></div>
+        <div class="readout-item"><div class="label">Elbow Y (mm)</div><div class="val" id="ro-elbow-y">—</div></div>
+      </div>
+    </div>
+
+    <!-- Status Indicator -->
+    <div>
+      <div class="section-title">Configuration Status</div>
+      <div class="status-indicator ok" id="status-ind">
+        <div class="dot-indicator"></div>
+        <span id="status-txt">Configuration Valid</span>
+      </div>
+    </div>
+
+    <!-- Clear Trail Button -->
+    <button class="btn-clear" onclick="clearTrail()">Clear Trail</button>
+
+    <!-- Equations Summary -->
+    <div class="card">
+      <div class="section-title">Equations Summary</div>
+      <div class="equations-box">
+        <strong>Forward Kinematics:</strong><br>
+        Cyl₁ → θ₁ (cosine rule at shoulder)<br>
+        Cyl₂ → θ₂ (cosine rule at elbow)<br>
+        Tip = Shoulder + L₁∠θ₁ + L₂∠(θ₁+θ₂)<br><br>
+        <strong>Inverse Kinematics:</strong><br>
+        2-link IK: cos(θ₂) = (x²+y² - L₁² - L₂²) / (2L₁L₂)<br>
+        θ₁ = atan2(y,x) - atan2(L₂sin(θ₂), L₁+L₂cos(θ₂))<br>
+        Then θ → Cyl via reverse triangle geometry
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="card">
+      <div class="section-title">Legend</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--frame)"></div> Base / Ground</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--boom)"></div> Boom (Link 1)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--stick)"></div> Stick (Link 2)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--cyl1)"></div> Cylinder 1</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--cyl2)"></div> Cylinder 2</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--tip)"></div> Tip (End Effector)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--highlight)"></div> Target Position</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// STATE & PARAMETERS
+// ============================================================
+let mode = 'fk';
+let params = {
+  L1: 1500,
+  L2: 1200,
+  c1_base_x: 150,
+  c1_base_y: -100,
+  c1_boom_dist: 600,
+  c1_boom_off: 80,
+  c2_boom_dist: 400,
+  c2_boom_off: -80,
+  c2_stick_dist: 300,
+  c2_stick_off: 80,
+};
+
+let state = {
+  cyl1: 800,
+  cyl2: 600,
+  target_x: 1800,
+  target_y: 800,
+};
+
+let trail = [];
+
+// ============================================================
+// CANVAS SETUP
+// ============================================================
+const canvas = document.getElementById('cnv');
+const ctx = canvas.getContext('2d');
+const dpr = window.devicePixelRatio || 1;
+
+function resize() {
+  const parent = canvas.parentElement;
+  canvas.width = parent.clientWidth * dpr;
+  canvas.height = parent.clientHeight * dpr;
+  canvas.style.width = parent.clientWidth + 'px';
+  canvas.style.height = parent.clientHeight + 'px';
+  draw();
+}
+
+window.addEventListener('resize', resize);
+
+// World to canvas coordinates (mm → pixels)
+// Origin at center-left, scale to fit
+function w2c(wx, wy) {
+  const scale = Math.min(canvas.width, canvas.height) * 0.00025; // mm to screen units
+  return {
+    x: canvas.width * 0.15 + wx * scale,
+    y: canvas.height * 0.5 - wy * scale
+  };
+}
+
+// Canvas to world coordinates
+function c2w(cx, cy) {
+  const scale = Math.min(canvas.width, canvas.height) * 0.00025;
+  return {
+    x: (cx - canvas.width * 0.15) / scale,
+    y: (canvas.height * 0.5 - cy) / scale
+  };
+}
+
+// ============================================================
+// MATH HELPERS
+// ============================================================
+function deg(rad) {
+  return rad * 180 / Math.PI;
+}
+
+function rad(deg) {
+  return deg * Math.PI / 180;
+}
+
+function clamp(val, min, max) {
+  return Math.max(min, Math.min(max, val));
+}
+
+// ============================================================
+// KINEMATICS - CYLINDER GEOMETRY
+// ============================================================
+// Convert cylinder length to joint angle using triangle geometry
+function cylToAngle(L_cyl, d_base, d_attach, alpha_base, alpha_attach) {
+  // Cosine rule: cos(A) = (d_base² + d_attach² - L_cyl²) / (2 * d_base * d_attach)
+  const cosA = (d_base * d_base + d_attach * d_attach - L_cyl * L_cyl) / (2 * d_base * d_attach);
+  
+  if (cosA < -1 || cosA > 1) return null; // Unreachable
+  
+  const A = Math.acos(cosA);
+  const theta = alpha_base + A - alpha_attach;
+  return theta;
+}
+
+// Convert joint angle to cylinder length
+function angleToCyl(theta, d_base, d_attach, alpha_base, alpha_attach) {
+  const A = (theta + alpha_attach) - alpha_base;
+  const L_cyl = Math.sqrt(d_base * d_base + d_attach * d_attach - 2 * d_base * d_attach * Math.cos(A));
+  return L_cyl;
+}
+
+// ============================================================
+// FORWARD KINEMATICS
+// ============================================================
+function computeFK() {
+  const shoulder = { x: 0, y: 0 };
+  
+  // Cylinder 1 geometry
+  const c1_base = { x: params.c1_base_x, y: params.c1_base_y };
+  const d1_base = Math.hypot(c1_base.x, c1_base.y);
+  const alpha1_base = Math.atan2(c1_base.y, c1_base.x);
+  const d1_attach = params.c1_boom_dist;
+  const alpha1_attach = Math.atan2(params.c1_boom_off, params.c1_boom_dist);
+  
+  // Cylinder 1 → θ₁
+  const theta1 = cylToAngle(state.cyl1, d1_base, d1_attach, alpha1_base, alpha1_attach);
+  
+  if (theta1 === null) {
+    return { valid: false, message: 'Cylinder 1 unreachable' };
+  }
+  
+  // Boom geometry
+  const elbow = {
+    x: shoulder.x + params.L1 * Math.cos(theta1),
+    y: shoulder.y + params.L1 * Math.sin(theta1)
+  };
+  
+  const c1_attach = {
+    x: shoulder.x + params.c1_boom_dist * Math.cos(theta1) + params.c1_boom_off * Math.sin(theta1),
+    y: shoulder.y + params.c1_boom_dist * Math.sin(theta1) - params.c1_boom_off * Math.cos(theta1)
+  };
+  
+  // Cylinder 2 geometry (relative to elbow)
+  const c2_boom_mount = {
+    x: shoulder.x + params.c2_boom_dist * Math.cos(theta1) + params.c2_boom_off * Math.sin(theta1),
+    y: shoulder.y + params.c2_boom_dist * Math.sin(theta1) - params.c2_boom_off * Math.cos(theta1)
+  };
+  
+  // Distance and angle from elbow to boom mount (for triangle geometry)
+  const dx_boom = c2_boom_mount.x - elbow.x;
+  const dy_boom = c2_boom_mount.y - elbow.y;
+  const d2_base = Math.hypot(dx_boom, dy_boom);
+  const alpha2_base = Math.atan2(dy_boom, dx_boom) - theta1; // Relative to boom
+  
+  const d2_attach = params.c2_stick_dist;
+  const alpha2_attach = Math.atan2(params.c2_stick_off, params.c2_stick_dist);
+  
+  // Cylinder 2 → θ₂ (relative angle)
+  const theta2_rel = cylToAngle(state.cyl2, d2_base, d2_attach, alpha2_base, alpha2_attach);
+  
+  if (theta2_rel === null) {
+    return { valid: false, message: 'Cylinder 2 unreachable' };
+  }
+  
+  const theta2_abs = theta1 + theta2_rel;
+  
+  // Stick geometry
+  const tip = {
+    x: elbow.x + params.L2 * Math.cos(theta2_abs),
+    y: elbow.y + params.L2 * Math.sin(theta2_abs)
+  };
+  
+  const c2_attach = {
+    x: elbow.x + params.c2_stick_dist * Math.cos(theta2_abs) + params.c2_stick_off * Math.sin(theta2_abs),
+    y: elbow.y + params.c2_stick_dist * Math.sin(theta2_abs) - params.c2_stick_off * Math.cos(theta2_abs)
+  };
+  
+  const reach = Math.hypot(tip.x, tip.y);
+  
+  return {
+    valid: true,
+    shoulder,
+    elbow,
+    tip,
+    theta1,
+    theta2: theta2_rel,
+    theta2_abs,
+    c1_base,
+    c1_attach,
+    c2_boom_mount,
+    c2_attach,
+    reach
+  };
+}
+
+// ============================================================
+// INVERSE KINEMATICS
+// ============================================================
+function computeIK() {
+  const target_x = state.target_x;
+  const target_y = state.target_y;
+  
+  const L1 = params.L1;
+  const L2 = params.L2;
+  
+  const dist = Math.hypot(target_x, target_y);
+  const reach_max = L1 + L2;
+  const reach_min = Math.abs(L1 - L2);
+  
+  if (dist > reach_max || dist < reach_min) {
+    return { valid: false, message: 'Target out of reach' };
+  }
+  
+  // 2-link IK
+  const cos_theta2 = (target_x * target_x + target_y * target_y - L1 * L1 - L2 * L2) / (2 * L1 * L2);
+  
+  if (cos_theta2 < -1 || cos_theta2 > 1) {
+    return { valid: false, message: 'IK solution invalid' };
+  }
+  
+  const theta2 = Math.acos(cos_theta2); // Elbow-up solution
+  const k1 = L1 + L2 * Math.cos(theta2);
+  const k2 = L2 * Math.sin(theta2);
+  const theta1 = Math.atan2(target_y, target_x) - Math.atan2(k2, k1);
+  
+  // Convert angles to cylinder lengths
+  const c1_base = { x: params.c1_base_x, y: params.c1_base_y };
+  const d1_base = Math.hypot(c1_base.x, c1_base.y);
+  const alpha1_base = Math.atan2(c1_base.y, c1_base.x);
+  const d1_attach = params.c1_boom_dist;
+  const alpha1_attach = Math.atan2(params.c1_boom_off, params.c1_boom_dist);
+  
+  const cyl1 = angleToCyl(theta1, d1_base, d1_attach, alpha1_base, alpha1_attach);
+  
+  // For cylinder 2, compute relative geometry
+  const elbow = {
+    x: L1 * Math.cos(theta1),
+    y: L1 * Math.sin(theta1)
+  };
+  
+  const c2_boom_mount = {
+    x: params.c2_boom_dist * Math.cos(theta1) + params.c2_boom_off * Math.sin(theta1),
+    y: params.c2_boom_dist * Math.sin(theta1) - params.c2_boom_off * Math.cos(theta1)
+  };
+  
+  const dx_boom = c2_boom_mount.x - elbow.x;
+  const dy_boom = c2_boom_mount.y - elbow.y;
+  const d2_base = Math.hypot(dx_boom, dy_boom);
+  const alpha2_base = Math.atan2(dy_boom, dx_boom) - theta1;
+  const d2_attach = params.c2_stick_dist;
+  const alpha2_attach = Math.atan2(params.c2_stick_off, params.c2_stick_dist);
+  
+  const cyl2 = angleToCyl(theta2, d2_base, d2_attach, alpha2_base, alpha2_attach);
+  
+  return {
+    valid: true,
+    cyl1,
+    cyl2,
+    theta1,
+    theta2
+  };
+}
+
+// ============================================================
+// DRAWING FUNCTIONS
+// ============================================================
+function drawLine(p1, p2, color, width) {
+  const a = w2c(p1.x, p1.y);
+  const b = w2c(p2.x, p2.y);
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width * dpr;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+}
+
+function drawCircle(p, radius, color, fill) {
+  const a = w2c(p.x, p.y);
+  ctx.beginPath();
+  ctx.arc(a.x, a.y, radius * dpr, 0, Math.PI * 2);
+  if (fill) {
+    ctx.fillStyle = color;
+    ctx.fill();
+  } else {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2 * dpr;
+    ctx.stroke();
+  }
+}
+
+function drawDashedCircle(center, radius, color) {
+  const c = w2c(center.x, center.y);
+  const scale = Math.min(canvas.width, canvas.height) * 0.00025;
+  const r = radius * scale;
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+  ctx.setLineDash([8 * dpr, 6 * dpr]);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5 * dpr;
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawText(p, text, color, offsetX, offsetY) {
+  const a = w2c(p.x, p.y);
+  ctx.font = `${11 * dpr}px JetBrains Mono`;
+  ctx.fillStyle = color || '#6b7094';
+  ctx.fillText(text, a.x + (offsetX || 8) * dpr, a.y + (offsetY || -8) * dpr);
+}
+
+function drawGrid() {
+  const color = 'rgba(42, 45, 58, 0.3)';
+  for (let i = -3000; i <= 3000; i += 500) {
+    drawLine({ x: i, y: -2000 }, { x: i, y: 3000 }, color, 0.5);
+    drawLine({ x: -1000, y: i }, { x: 3000, y: i }, color, 0.5);
+  }
+}
+
+function drawGround() {
+  // Ground line
+  drawLine({ x: -500, y: 0 }, { x: 3000, y: 0 }, '#d0d3de', 3);
+  
+  // Hatching
+  for (let i = -500; i <= 3000; i += 80) {
+    drawLine({ x: i, y: 0 }, { x: i - 40, y: -60 }, 'rgba(208, 211, 222, 0.3)', 1);
+  }
+}
+
+function drawCylinder(p1, p2, color) {
+  // Tapered barrel shape
+  const a = w2c(p1.x, p1.y);
+  const b = w2c(p2.x, p2.y);
+  
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  const angle = Math.atan2(dy, dx);
+  
+  ctx.save();
+  ctx.translate(a.x, a.y);
+  ctx.rotate(angle);
+  
+  // Barrel body
+  ctx.fillStyle = color;
+  ctx.fillRect(0, -3 * dpr, len, 6 * dpr);
+  
+  // End caps
+  ctx.fillStyle = color;
+  ctx.fillRect(-4 * dpr, -5 * dpr, 4 * dpr, 10 * dpr);
+  ctx.fillRect(len, -5 * dpr, 4 * dpr, 10 * dpr);
+  
+  ctx.restore();
+  
+  // Mount points
+  drawCircle(p1, 3, color, true);
+  drawCircle(p2, 3, color, true);
+}
+
+function drawBaseFrame() {
+  // Triangle at shoulder
+  const points = [
+    { x: 0, y: 0 },
+    { x: -80, y: -100 },
+    { x: 80, y: -100 }
+  ];
+  
+  const a = w2c(points[0].x, points[0].y);
+  const b = w2c(points[1].x, points[1].y);
+  const c = w2c(points[2].x, points[2].y);
+  
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.lineTo(c.x, c.y);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(208, 211, 222, 0.15)';
+  ctx.fill();
+  ctx.strokeStyle = '#d0d3de';
+  ctx.lineWidth = 2 * dpr;
+  ctx.stroke();
+}
+
+function drawArc(center, radius, startAngle, endAngle, color) {
+  const c = w2c(center.x, center.y);
+  const scale = Math.min(canvas.width, canvas.height) * 0.00025;
+  const r = radius * scale;
+  
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, r, -endAngle, -startAngle, true); // Flip Y
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5 * dpr;
+  ctx.stroke();
+}
+
+function drawTrail() {
+  if (trail.length < 2) return;
+  
+  ctx.beginPath();
+  const first = w2c(trail[0].x, trail[0].y);
+  ctx.moveTo(first.x, first.y);
+  
+  for (let i = 1; i < trail.length; i++) {
+    const pt = w2c(trail[i].x, trail[i].y);
+    ctx.lineTo(pt.x, pt.y);
+  }
+  
+  ctx.strokeStyle = 'rgba(255, 213, 79, 0.3)';
+  ctx.lineWidth = 2 * dpr;
+  ctx.stroke();
+}
+
+function drawCrosshair(target) {
+  const size = 20;
+  const c = w2c(target.x, target.y);
+  
+  ctx.beginPath();
+  ctx.moveTo(c.x - size * dpr, c.y);
+  ctx.lineTo(c.x + size * dpr, c.y);
+  ctx.moveTo(c.x, c.y - size * dpr);
+  ctx.lineTo(c.x, c.y + size * dpr);
+  ctx.strokeStyle = '#e94560';
+  ctx.lineWidth = 2 * dpr;
+  ctx.stroke();
+  
+  drawCircle(target, 5, '#e94560', false);
+}
+
+function drawScaleBar() {
+  const x = canvas.width - 120 * dpr;
+  const y = canvas.height - 40 * dpr;
+  const len = 100 * dpr; // 500mm in screen units (approximate)
+  
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + len, y);
+  ctx.moveTo(x, y - 5 * dpr);
+  ctx.lineTo(x, y + 5 * dpr);
+  ctx.moveTo(x + len, y - 5 * dpr);
+  ctx.lineTo(x + len, y + 5 * dpr);
+  ctx.strokeStyle = '#6b7094';
+  ctx.lineWidth = 1.5 * dpr;
+  ctx.stroke();
+  
+  ctx.font = `${10 * dpr}px JetBrains Mono`;
+  ctx.fillStyle = '#6b7094';
+  ctx.fillText('500mm', x + len / 2 - 20 * dpr, y + 18 * dpr);
+}
+
+function drawLegendBar() {
+  const items = [
+    { color: '#4fc3f7', label: 'Boom' },
+    { color: '#81c784', label: 'Stick' },
+    { color: '#ff8a65', label: 'Cyl1' },
+    { color: '#ba68c8', label: 'Cyl2' },
+    { color: '#ffd54f', label: 'Tip' },
+  ];
+  
+  const x = 20 * dpr;
+  let y = canvas.height - 40 * dpr;
+  
+  items.forEach(item => {
+    ctx.fillStyle = item.color;
+    ctx.fillRect(x, y, 12 * dpr, 12 * dpr);
+    
+    ctx.font = `${10 * dpr}px DM Sans`;
+    ctx.fillStyle = '#e0e2eb';
+    ctx.fillText(item.label, x + 18 * dpr, y + 10 * dpr);
+    
+    y -= 18 * dpr;
+  });
+}
+
+function drawInfoBar(fk) {
+  if (!fk.valid) return;
+  
+  const lines = [
+    `Mode: ${mode === 'fk' ? 'Forward Kinematics' : 'Inverse Kinematics'}`,
+    `Reach: ${fk.reach.toFixed(0)} mm`,
+    `θ₁: ${deg(fk.theta1).toFixed(1)}°  θ₂: ${deg(fk.theta2).toFixed(1)}°`
+  ];
+  
+  const x = 20 * dpr;
+  let y = 30 * dpr;
+  
+  ctx.font = `${11 * dpr}px JetBrains Mono`;
+  ctx.fillStyle = '#8899aa';
+  
+  lines.forEach(line => {
+    ctx.fillText(line, x, y);
+    y += 16 * dpr;
+  });
+}
+
+// ============================================================
+// MAIN DRAW
+// ============================================================
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  drawGrid();
+  drawGround();
+  
+  let fk;
+  if (mode === 'fk') {
+    fk = computeFK();
+  } else {
+    const ik = computeIK();
+    if (ik.valid) {
+      state.cyl1 = ik.cyl1;
+      state.cyl2 = ik.cyl2;
+      fk = computeFK();
+    } else {
+      fk = { valid: false, message: ik.message };
+    }
+  }
+  
+  if (fk.valid) {
+    // Reach circles
+    const reach_max = params.L1 + params.L2;
+    const reach_min = Math.abs(params.L1 - params.L2);
+    drawDashedCircle({ x: 0, y: 0 }, reach_max, 'rgba(79, 140, 255, 0.2)');
+    drawDashedCircle({ x: 0, y: 0 }, reach_min, 'rgba(79, 140, 255, 0.15)');
+    
+    // Trail
+    drawTrail();
+    
+    // Base frame
+    drawBaseFrame();
+    
+    // Cylinders
+    drawCylinder(fk.c1_base, fk.c1_attach, '#ff8a65');
+    drawCylinder(fk.c2_boom_mount, fk.c2_attach, '#ba68c8');
+    
+    // Boom
+    drawLine(fk.shoulder, fk.elbow, '#4fc3f7', 6);
+    
+    // Stick
+    drawLine(fk.elbow, fk.tip, '#81c784', 6);
+    
+    // Joints
+    drawCircle(fk.shoulder, 7, '#fff', true);
+    drawCircle(fk.elbow, 6, '#fff', true);
+    drawCircle(fk.tip, 5, '#ffd54f', true);
+    
+    // Cylinder mount points
+    drawCircle(fk.c1_base, 3, '#ff8a65', true);
+    drawCircle(fk.c2_boom_mount, 3, '#ba68c8', true);
+    
+    // θ₁ arc
+    drawArc(fk.shoulder, 200, 0, fk.theta1, '#4fc3f7');
+    
+    // Labels
+    drawText(fk.tip, `(${fk.tip.x.toFixed(0)}, ${fk.tip.y.toFixed(0)})`, '#ffd54f', 12, 0);
+    drawText(fk.shoulder, `θ₁=${deg(fk.theta1).toFixed(1)}°`, '#4fc3f7', 12, 30);
+    drawText(fk.elbow, `θ₂=${deg(fk.theta2).toFixed(1)}°`, '#81c784', 12, -20);
+    
+    const c1_mid = { x: (fk.c1_base.x + fk.c1_attach.x) / 2, y: (fk.c1_base.y + fk.c1_attach.y) / 2 };
+    drawText(c1_mid, `${state.cyl1.toFixed(0)}mm`, '#ff8a65', 8, 0);
+    
+    const c2_mid = { x: (fk.c2_boom_mount.x + fk.c2_attach.x) / 2, y: (fk.c2_boom_mount.y + fk.c2_attach.y) / 2 };
+    drawText(c2_mid, `${state.cyl2.toFixed(0)}mm`, '#ba68c8', 8, 0);
+    
+    // Add to trail
+    if (trail.length === 0 || Math.hypot(trail[trail.length - 1].x - fk.tip.x, trail[trail.length - 1].y - fk.tip.y) > 10) {
+      trail.push({ x: fk.tip.x, y: fk.tip.y });
+      if (trail.length > 500) trail.shift();
+    }
+    
+    // IK mode: draw target crosshair
+    if (mode === 'ik') {
+      drawCrosshair({ x: state.target_x, y: state.target_y });
+    }
+    
+    // Info bar
+    drawInfoBar(fk);
+  } else {
+    // Unreachable - show message
+    ctx.font = `${16 * dpr}px DM Sans`;
+    ctx.fillStyle = '#e94560';
+    ctx.fillText('⚠ UNREACHABLE', canvas.width / 2 - 80 * dpr, canvas.height / 2);
+    ctx.font = `${12 * dpr}px JetBrains Mono`;
+    ctx.fillStyle = '#8899aa';
+    ctx.fillText(fk.message || 'Configuration invalid', canvas.width / 2 - 100 * dpr, canvas.height / 2 + 24 * dpr);
+  }
+  
+  // Scale bar & legend
+  drawScaleBar();
+  drawLegendBar();
+}
+
+// ============================================================
+// UI CONTROLS
+// ============================================================
+function setMode(newMode) {
+  mode = newMode;
+  document.getElementById('btnFK').classList.toggle('active', mode === 'fk');
+  document.getElementById('btnIK').classList.toggle('active', mode === 'ik');
+  document.getElementById('fk-controls').style.display = mode === 'fk' ? 'block' : 'none';
+  document.getElementById('ik-controls').style.display = mode === 'ik' ? 'block' : 'none';
+  draw();
+  updateReadouts();
+}
+
+function clearTrail() {
+  trail = [];
+  draw();
+}
+
+function syncSlider(id, value) {
+  const slider = document.getElementById(`sl-${id}`);
+  const input = document.getElementById(`num-${id}`);
+  if (slider) slider.value = value;
+  if (input) input.value = value;
+}
+
+function updateFromSlider(id) {
+  const slider = document.getElementById(`sl-${id}`);
+  const input = document.getElementById(`num-${id}`);
+  const value = parseFloat(slider.value);
+  input.value = value;
+  
+  if (id === 'L1') params.L1 = value;
+  else if (id === 'L2') params.L2 = value;
+  else if (id === 'c1-base-x') params.c1_base_x = value;
+  else if (id === 'c1-base-y') params.c1_base_y = value;
+  else if (id === 'c1-boom-dist') params.c1_boom_dist = value;
+  else if (id === 'c1-boom-off') params.c1_boom_off = value;
+  else if (id === 'c2-boom-dist') params.c2_boom_dist = value;
+  else if (id === 'c2-boom-off') params.c2_boom_off = value;
+  else if (id === 'c2-stick-dist') params.c2_stick_dist = value;
+  else if (id === 'c2-stick-off') params.c2_stick_off = value;
+  else if (id === 'cyl1') state.cyl1 = value;
+  else if (id === 'cyl2') state.cyl2 = value;
+  else if (id === 'target-x') state.target_x = value;
+  else if (id === 'target-y') state.target_y = value;
+  
+  draw();
+  updateReadouts();
+}
+
+function updateFromInput(id) {
+  const input = document.getElementById(`num-${id}`);
+  const slider = document.getElementById(`sl-${id}`);
+  let value = parseFloat(input.value);
+  
+  // Clamp to slider range
+  const min = parseFloat(slider.min);
+  const max = parseFloat(slider.max);
+  value = clamp(value, min, max);
+  
+  slider.value = value;
+  input.value = value;
+  
+  if (id === 'L1') params.L1 = value;
+  else if (id === 'L2') params.L2 = value;
+  else if (id === 'c1-base-x') params.c1_base_x = value;
+  else if (id === 'c1-base-y') params.c1_base_y = value;
+  else if (id === 'c1-boom-dist') params.c1_boom_dist = value;
+  else if (id === 'c1-boom-off') params.c1_boom_off = value;
+  else if (id === 'c2-boom-dist') params.c2_boom_dist = value;
+  else if (id === 'c2-boom-off') params.c2_boom_off = value;
+  else if (id === 'c2-stick-dist') params.c2_stick_dist = value;
+  else if (id === 'c2-stick-off') params.c2_stick_off = value;
+  else if (id === 'cyl1') state.cyl1 = value;
+  else if (id === 'cyl2') state.cyl2 = value;
+  else if (id === 'target-x') state.target_x = value;
+  else if (id === 'target-y') state.target_y = value;
+  
+  draw();
+  updateReadouts();
+}
+
+function updateReadouts() {
+  let fk;
+  if (mode === 'fk') {
+    fk = computeFK();
+  } else {
+    const ik = computeIK();
+    if (ik.valid) {
+      document.getElementById('ik-cyl1').textContent = ik.cyl1.toFixed(1) + ' mm';
+      document.getElementById('ik-cyl2').textContent = ik.cyl2.toFixed(1) + ' mm';
+      document.getElementById('ik-warning').style.display = 'none';
+      state.cyl1 = ik.cyl1;
+      state.cyl2 = ik.cyl2;
+      fk = computeFK();
+    } else {
+      document.getElementById('ik-cyl1').textContent = '—';
+      document.getElementById('ik-cyl2').textContent = '—';
+      document.getElementById('ik-warning').style.display = 'block';
+      fk = { valid: false };
+    }
+  }
+  
+  if (fk.valid) {
+    document.getElementById('ro-x').textContent = fk.tip.x.toFixed(1);
+    document.getElementById('ro-y').textContent = fk.tip.y.toFixed(1);
+    document.getElementById('ro-theta1').textContent = deg(fk.theta1).toFixed(2);
+    document.getElementById('ro-theta2').textContent = deg(fk.theta2).toFixed(2);
+    document.getElementById('ro-cyl1').textContent = state.cyl1.toFixed(1);
+    document.getElementById('ro-cyl2').textContent = state.cyl2.toFixed(1);
+    document.getElementById('ro-reach').textContent = fk.reach.toFixed(1);
+    document.getElementById('ro-elbow-y').textContent = fk.elbow.y.toFixed(1);
+    
+    const statusInd = document.getElementById('status-ind');
+    const statusTxt = document.getElementById('status-txt');
+    statusInd.className = 'status-indicator ok';
+    statusTxt.textContent = 'Configuration Valid';
+  } else {
+    ['ro-x', 'ro-y', 'ro-theta1', 'ro-theta2', 'ro-cyl1', 'ro-cyl2', 'ro-reach', 'ro-elbow-y'].forEach(id => {
+      document.getElementById(id).textContent = '—';
+    });
+    
+    const statusInd = document.getElementById('status-ind');
+    const statusTxt = document.getElementById('status-txt');
+    statusInd.className = 'status-indicator danger';
+    statusTxt.textContent = fk.message || 'Invalid Configuration';
+  }
+}
+
+// ============================================================
+// EVENT LISTENERS
+// ============================================================
+const sliderIds = ['L1', 'L2', 'c1-base-x', 'c1-base-y', 'c1-boom-dist', 'c1-boom-off', 
+                   'c2-boom-dist', 'c2-boom-off', 'c2-stick-dist', 'c2-stick-off',
+                   'cyl1', 'cyl2', 'target-x', 'target-y'];
+
+sliderIds.forEach(id => {
+  const slider = document.getElementById(`sl-${id}`);
+  const input = document.getElementById(`num-${id}`);
+  if (slider) slider.addEventListener('input', () => updateFromSlider(id));
+  if (input) input.addEventListener('input', () => updateFromInput(id));
+});
+
+// Canvas click & drag for IK target
+let dragging = false;
+
+canvas.addEventListener('mousedown', (e) => {
+  if (mode !== 'ik') return;
+  dragging = true;
+  updateTargetFromMouse(e);
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  if (!dragging) return;
+  updateTargetFromMouse(e);
+});
+
+canvas.addEventListener('mouseup', () => {
+  dragging = false;
+});
+
+canvas.addEventListener('mouseleave', () => {
+  dragging = false;
+});
+
+function updateTargetFromMouse(e) {
+  const rect = canvas.getBoundingClientRect();
+  const cx = (e.clientX - rect.left) * dpr;
+  const cy = (e.clientY - rect.top) * dpr;
+  const world = c2w(cx, cy);
+  
+  state.target_x = clamp(world.x, -2500, 2500);
+  state.target_y = clamp(world.y, -1500, 2500);
+  
+  syncSlider('target-x', state.target_x);
+  syncSlider('target-y', state.target_y);
+  
+  draw();
+  updateReadouts();
+}
+
+// ============================================================
+// INIT
+// ============================================================
+resize();
+updateReadouts();
+</script>
+
+</body>
+</html>
